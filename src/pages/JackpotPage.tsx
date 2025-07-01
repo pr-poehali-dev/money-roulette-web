@@ -193,15 +193,6 @@ const JackpotPage = () => {
     const bet = parseFloat(betAmount);
     const gameId = gameState.gameId || "game_" + Date.now();
 
-    const newPlayer: Player = {
-      id: Date.now().toString(),
-      name: currentUser.name,
-      avatar: currentUser.avatar,
-      bet,
-      chance: 0,
-      userId: currentUser.id,
-    };
-
     // Add bet to history
     const betRecord: BetHistory = {
       id: "bet_" + Date.now(),
@@ -214,7 +205,32 @@ const JackpotPage = () => {
     setBetHistory((prev) => [betRecord, ...prev]);
 
     setGameState((prev) => {
-      const newPlayers = [...prev.players, newPlayer];
+      // Find existing player or create new one
+      const existingPlayerIndex = prev.players.findIndex(
+        (p) => p.userId === currentUser.id,
+      );
+      let newPlayers;
+
+      if (existingPlayerIndex >= 0) {
+        // Update existing player's bet
+        newPlayers = prev.players.map((player, index) =>
+          index === existingPlayerIndex
+            ? { ...player, bet: player.bet + bet }
+            : player,
+        );
+      } else {
+        // Add new player
+        const newPlayer: Player = {
+          id: Date.now().toString(),
+          name: currentUser.name,
+          avatar: currentUser.avatar,
+          bet,
+          chance: 0,
+          userId: currentUser.id,
+        };
+        newPlayers = [...prev.players, newPlayer];
+      }
+
       const newTotalPot = prev.totalPot + bet;
 
       // Calculate chances

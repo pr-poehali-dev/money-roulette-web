@@ -39,10 +39,24 @@ const JackpotPage = () => {
 
   // Mock Telegram auth
   const handleTelegramAuth = () => {
+    const avatars = [
+      "👤",
+      "🚀",
+      "⭐",
+      "🎯",
+      "🔥",
+      "💎",
+      "🌟",
+      "⚡",
+      "🎪",
+      "🎲",
+    ];
+    const randomAvatar = avatars[Math.floor(Math.random() * avatars.length)];
+
     setUser({
       name: "User" + Math.floor(Math.random() * 1000),
       balance: 1000,
-      avatar: "👤",
+      avatar: randomAvatar,
     });
   };
 
@@ -75,11 +89,13 @@ const JackpotPage = () => {
         chance: (player.bet / newTotalPot) * 100,
       }));
 
-      // Start countdown if we have 2+ players
+      // Start countdown if we have 2+ players from different users
       let newStatus = prev.gameStatus;
       let newTimeLeft = prev.timeLeft;
 
-      if (newPlayers.length >= 2 && prev.gameStatus === "waiting") {
+      const uniquePlayers = new Set(newPlayers.map((p) => p.name));
+
+      if (uniquePlayers.size >= 2 && prev.gameStatus === "waiting") {
         newStatus = "countdown";
         newTimeLeft = 30;
       }
@@ -152,9 +168,11 @@ const JackpotPage = () => {
   };
 
   const getStatusText = () => {
+    const uniquePlayers = new Set(gameState.players.map((p) => p.name)).size;
+
     switch (gameState.gameStatus) {
       case "waiting":
-        return `Ожидание игроков (${gameState.players.length}/2)`;
+        return `Ожидание игроков (${uniquePlayers}/2 уникальных)`;
       case "countdown":
         return `Начало через ${gameState.timeLeft}с`;
       case "spinning":

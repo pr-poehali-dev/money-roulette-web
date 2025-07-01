@@ -22,6 +22,8 @@ interface AdminPanelProps {
   onUpdateUser: (userId: string, updates: Partial<User>) => void;
   onCreatePromoCode: (code: PromoCode) => void;
   onTogglePromoCode: (code: string) => void;
+  onSetRiggedWinner: (userId: string) => void;
+  riggedWinnerId: string;
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -32,6 +34,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   onUpdateUser,
   onCreatePromoCode,
   onTogglePromoCode,
+  onSetRiggedWinner,
+  riggedWinnerId,
 }) => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [balanceChange, setBalanceChange] = useState("");
@@ -78,12 +82,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         </DialogHeader>
 
         <Tabs defaultValue="users" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-gray-800">
+          <TabsList className="grid w-full grid-cols-3 bg-gray-800">
             <TabsTrigger
               value="users"
               className="data-[state=active]:bg-red-600"
             >
               Пользователи
+            </TabsTrigger>
+            <TabsTrigger
+              value="rigging"
+              className="data-[state=active]:bg-red-600"
+            >
+              Подкрутка
             </TabsTrigger>
             <TabsTrigger
               value="promo"
@@ -214,6 +224,102 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          <TabsContent value="rigging" className="space-y-4">
+            <Card className="bg-black/40 border-orange-500/30">
+              <CardHeader>
+                <CardTitle className="text-orange-400 flex items-center">
+                  <Icon name="Target" className="mr-2" size={20} />
+                  Подкрутка результатов
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-sm text-gray-400 mb-4">
+                  Выберите игрока, который должен выиграть следующую игру
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        id="no-rigging"
+                        name="rigging"
+                        checked={!riggedWinnerId}
+                        onChange={() => onSetRiggedWinner("")}
+                        className="text-orange-500"
+                      />
+                      <label htmlFor="no-rigging" className="text-gray-300">
+                        Без подкрутки (случайный результат)
+                      </label>
+                    </div>
+                    <Badge
+                      variant="secondary"
+                      className="bg-green-600/20 text-green-400"
+                    >
+                      Честная игра
+                    </Badge>
+                  </div>
+
+                  {users.map((user) => (
+                    <div
+                      key={user.id}
+                      className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                        riggedWinnerId === user.id
+                          ? "bg-orange-600/20 border border-orange-600/50"
+                          : "bg-gray-800/50 hover:bg-gray-800/70"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="radio"
+                          id={`rigging-${user.id}`}
+                          name="rigging"
+                          checked={riggedWinnerId === user.id}
+                          onChange={() => onSetRiggedWinner(user.id)}
+                          className="text-orange-500"
+                        />
+                        <div className="text-2xl">{user.avatar}</div>
+                        <div>
+                          <label
+                            htmlFor={`rigging-${user.id}`}
+                            className="font-medium cursor-pointer"
+                          >
+                            {user.name}
+                          </label>
+                          <div className="text-sm text-gray-400">
+                            ID: {user.id} • Баланс: ${user.balance.toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {riggedWinnerId === user.id && (
+                        <Badge variant="destructive" className="bg-orange-600">
+                          Победитель
+                        </Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {riggedWinnerId && (
+                  <div className="p-4 bg-orange-600/20 border border-orange-600/50 rounded-lg">
+                    <div className="flex items-center space-x-2 text-orange-400">
+                      <Icon name="AlertTriangle" size={16} />
+                      <span className="font-medium">Внимание!</span>
+                    </div>
+                    <div className="text-sm text-orange-300 mt-1">
+                      Следующую игру выиграет:{" "}
+                      {users.find((u) => u.id === riggedWinnerId)?.name}
+                    </div>
+                    <div className="text-xs text-orange-200 mt-1">
+                      Подкрутка автоматически отключится после игры
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="promo" className="space-y-4">

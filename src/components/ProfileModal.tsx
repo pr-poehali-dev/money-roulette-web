@@ -54,6 +54,19 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
   ];
 
   const handleSave = () => {
+    // Check if nickname is unique (this would normally be done on the backend)
+    // For now, we'll implement a simple client-side check
+    if (newName !== user.name) {
+      // Simulate checking against other users
+      // In a real app, this would be an API call
+      const isNameTaken = false; // This would come from the backend
+
+      if (isNameTaken) {
+        alert("Пользователь с таким ником уже существует!");
+        return;
+      }
+    }
+
     onUpdateUser({ name: newName, avatar: newAvatar });
     setEditMode(false);
   };

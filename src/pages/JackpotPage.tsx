@@ -60,6 +60,12 @@ const JackpotPage = () => {
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
 
+  // Rigging system
+  const [riggedWinnerId, setRiggedWinnerId] = useLocalStorage<string>(
+    "jackpot_rigged_winner",
+    "",
+  );
+
   // Initialize current user from localStorage
   useEffect(() => {
     const savedUserId = localStorage.getItem("jackpot_current_user");
@@ -102,9 +108,22 @@ const JackpotPage = () => {
     localStorage.setItem("jackpot_current_user", userId);
   };
 
-  // Update user
+  // Update user with nickname uniqueness check
   const updateUser = (updates: Partial<User>) => {
     if (!currentUser) return;
+
+    // Check nickname uniqueness if name is being changed
+    if (updates.name && updates.name !== currentUser.name) {
+      const isNameTaken = users.some(
+        (u) =>
+          u.id !== currentUser.id &&
+          u.name.toLowerCase() === updates.name.toLowerCase(),
+      );
+      if (isNameTaken) {
+        alert("Пользователь с таким ником уже существует!");
+        return;
+      }
+    }
 
     const updatedUser = { ...currentUser, ...updates };
     setCurrentUser(updatedUser);
@@ -256,15 +275,41 @@ const JackpotPage = () => {
 
     // Simulate spinning for 3 seconds
     setTimeout(() => {
-      const random = Math.random() * gameState.totalPot;
-      let cumulative = 0;
       let winner = gameState.players[0];
 
-      for (const player of gameState.players) {
-        cumulative += player.bet;
-        if (random <= cumulative) {
-          winner = player;
-          break;
+      // Check if game is rigged
+      if (riggedWinnerId) {
+        const riggedPlayer = gameState.players.find(
+          (p) => p.userId === riggedWinnerId,
+        );
+        if (riggedPlayer) {
+          winner = riggedPlayer;
+          // Reset rigging after use
+          setRiggedWinnerId("");
+        } else {
+          // If rigged player not in game, use normal random selection
+          const random = Math.random() * gameState.totalPot;
+          let cumulative = 0;
+
+          for (const player of gameState.players) {
+            cumulative += player.bet;
+            if (random <= cumulative) {
+              winner = player;
+              break;
+            }
+          }
+        }
+      } else {
+        // Normal random selection
+        const random = Math.random() * gameState.totalPot;
+        let cumulative = 0;
+
+        for (const player of gameState.players) {
+          cumulative += player.bet;
+          if (random <= cumulative) {
+            winner = player;
+            break;
+          }
         }
       }
 
@@ -560,6 +605,9 @@ const JackpotPage = () => {
                         <div>
                           <div className="font-medium flex items-center space-x-2">
                             <span>{player.name}</span>
+                            <span className="text-xs text-gray-500">
+                              (#{player.userId.slice(-6)})
+                            </span>
                             <Badge variant="secondary" className="text-xs">
                               {player.chance.toFixed(1)}%
                             </Badge>
@@ -680,6 +728,8 @@ const JackpotPage = () => {
               onUpdateUser={adminUpdateUser}
               onCreatePromoCode={createPromoCode}
               onTogglePromoCode={togglePromoCode}
+              onSetRiggedWinner={setRiggedWinnerId}
+              riggedWinnerId={riggedWinnerId}
             />
           )}
         </>

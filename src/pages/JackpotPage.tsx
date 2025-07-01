@@ -9,6 +9,7 @@ import ProfileModal from "@/components/ProfileModal";
 import AdminPanel from "@/components/AdminPanel";
 import HistoryModal from "@/components/HistoryModal";
 import RouletteWheel from "@/components/RouletteWheel";
+import TelegramLogin from "@/components/TelegramLogin";
 import {
   User,
   Player,
@@ -17,6 +18,16 @@ import {
   BetHistory,
   PromoCode,
 } from "@/types";
+
+interface TelegramUser {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+}
 import {
   gameStateManager,
   usersManager,
@@ -147,8 +158,44 @@ const JackpotPage = () => {
     }
   }, [currentUser]);
 
-  // Mock Telegram auth
-  const handleTelegramAuth = () => {
+  // Real Telegram auth
+  const handleTelegramAuth = (telegramUser: TelegramUser) => {
+    const userId = `tg_${telegramUser.id}`;
+    const displayName =
+      telegramUser.username ||
+      `${telegramUser.first_name}${telegramUser.last_name ? " " + telegramUser.last_name : ""}`;
+
+    // Check if user already exists
+    let existingUser = users.find((u) => u.id === userId);
+
+    if (existingUser) {
+      // User exists, just log them in
+      setCurrentUser(existingUser);
+      globalState.setData(STORAGE_KEYS.CURRENT_USER, userId);
+      onlineUsersManager.addUser(userId);
+    } else {
+      // Create new user
+      const newUser: User = {
+        id: userId,
+        name: displayName,
+        balance: 1000, // Starting balance
+        avatar: telegramUser.photo_url ? "📷" : "👤",
+        isAdmin: users.length === 0, // First user is admin
+        joinedAt: new Date().toISOString(),
+        totalBets: 0,
+        totalWins: 0,
+      };
+
+      const updatedUsers = [...users, newUser];
+      usersManager.set(updatedUsers);
+      setCurrentUser(newUser);
+      globalState.setData(STORAGE_KEYS.CURRENT_USER, userId);
+      onlineUsersManager.addUser(userId);
+    }
+  };
+
+  // Fallback mock auth for development
+  const handleMockAuth = () => {
     const avatars = [
       "👤",
       "🚀",
@@ -162,14 +209,14 @@ const JackpotPage = () => {
       "🎲",
     ];
     const randomAvatar = avatars[Math.floor(Math.random() * avatars.length)];
-    const userId = "user_" + Date.now();
+    const userId = "mock_" + Date.now();
 
     const newUser: User = {
       id: userId,
       name: "User" + Math.floor(Math.random() * 1000),
       balance: 1000,
       avatar: randomAvatar,
-      isAdmin: users.length === 0, // First user is admin
+      isAdmin: users.length === 0,
       joinedAt: new Date().toISOString(),
       totalBets: 0,
       totalWins: 0,
@@ -179,6 +226,7 @@ const JackpotPage = () => {
     usersManager.set(updatedUsers);
     setCurrentUser(newUser);
     globalState.setData(STORAGE_KEYS.CURRENT_USER, userId);
+    onlineUsersManager.addUser(userId);
   };
 
   // Update user with nickname uniqueness check
@@ -544,8 +592,11 @@ const JackpotPage = () => {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    localStorage.removeItem("currentUser");
-                    window.location.reload();
+                    if (currentUser) {
+                      onlineUsersManager.removeUser(currentUser.id);
+                    }
+                    globalState.setData(STORAGE_KEYS.CURRENT_USER, "");
+                    setCurrentUser(null);
                   }}
                   className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
                 >
@@ -554,13 +605,23 @@ const JackpotPage = () => {
                 </Button>
               </>
             ) : (
-              <Button
-                onClick={handleTelegramAuth}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <Icon name="MessageCircle" className="mr-2" size={20} />
-                Войти через Telegram
-              </Button>
+              <div className="flex items-center space-x-3">
+                {/* Real Telegram Login */}
+                <TelegramLogin
+                  onAuth={handleTelegramAuth}
+                  botName="YourBotName"
+                />
+
+                {/* Fallback for development */}
+                <Button
+                  onClick={handleMockAuth}
+                  variant="outline"
+                  size="sm"
+                  className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                >
+                  Тест
+                </Button>
+              </div>
             )}
           </div>
         </div>

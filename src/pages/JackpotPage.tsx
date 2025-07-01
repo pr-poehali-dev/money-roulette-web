@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import Icon from "@/components/ui/icon";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
 import ProfileModal from "@/components/ProfileModal";
 import AdminPanel from "@/components/AdminPanel";
 import HistoryModal from "@/components/HistoryModal";
@@ -17,47 +16,39 @@ import {
   BetHistory,
   PromoCode,
 } from "@/types";
+import {
+  gameStateManager,
+  usersManager,
+  onlineUsersManager,
+  globalState,
+  STORAGE_KEYS,
+  initializeGlobalState,
+} from "@/services/globalState";
 
 const JackpotPage = () => {
-  // Local Storage
-  const [users, setUsers] = useLocalStorage<User[]>("jackpot_users", []);
-  const [gameHistory, setGameHistory] = useLocalStorage<GameHistory[]>(
-    "jackpot_history",
-    [],
-  );
-  const [betHistory, setBetHistory] = useLocalStorage<BetHistory[]>(
-    "jackpot_bets",
-    [],
-  );
-  const [promoCodes, setPromoCodes] = useLocalStorage<PromoCode[]>(
-    "jackpot_promos",
-    [
-      {
-        code: "WELCOME100",
-        amount: 100,
-        usedBy: [],
-        maxUses: 100,
-        isActive: true,
-      },
-      { code: "BONUS50", amount: 50, usedBy: [], maxUses: 50, isActive: true },
-    ],
-  );
+  // Initialize global state
+  useEffect(() => {
+    initializeGlobalState();
+  }, []);
 
-  // State
+  // Global State
+  const [users, setUsers] = useState<User[]>([]);
+  const [gameHistory, setGameHistory] = useState<GameHistory[]>([]);
+  const [betHistory, setBetHistory] = useState<BetHistory[]>([]);
+  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [gameState, setGameState] = useState<GameState>({
+    players: [],
+    totalPot: 0,
+    timeLeft: 0,
+    gameStatus: "waiting",
+    winner: null,
+    gameId: "",
+  });
+
+  // Local State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [betAmount, setBetAmount] = useState<string>("");
-  const [gameState, setGameState] = useLocalStorage<GameState>(
-    "jackpot_game_state",
-    {
-      players: [],
-      totalPot: 0,
-      timeLeft: 0,
-      gameStatus: "waiting",
-      winner: null,
-      gameId: "",
-    },
-  );
-  const [onlineCount, setOnlineCount] = useState<number>(1);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
   // Modals
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -65,33 +56,88 @@ const JackpotPage = () => {
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
 
   // Rigging system
-  const [riggedWinnerId, setRiggedWinnerId] = useLocalStorage<string>(
-    "jackpot_rigged_winner",
-    "",
-  );
+  const [riggedWinnerId, setRiggedWinnerId] = useState<string>("");
 
-  // Initialize current user from localStorage
+  // Subscribe to global state changes
   useEffect(() => {
-    const savedUserId = localStorage.getItem("jackpot_current_user");
-    if (savedUserId) {
+    // Load initial data
+    setUsers(usersManager.get());
+    setGameState(gameStateManager.get());
+    setGameHistory(globalState.getData(STORAGE_KEYS.GAME_HISTORY, []));
+    setBetHistory(globalState.getData(STORAGE_KEYS.BET_HISTORY, []));
+    setPromoCodes(globalState.getData(STORAGE_KEYS.PROMO_CODES, []));
+    setRiggedWinnerId(globalState.getData(STORAGE_KEYS.RIGGED_WINNER, ""));
+    setOnlineUsers(onlineUsersManager.get());
+
+    // Subscribe to changes
+    const unsubscribes = [
+      usersManager.subscribe((newUsers) => {
+        setUsers(newUsers);
+      }),
+      gameStateManager.subscribe((newGameState) => {
+        setGameState(newGameState);
+      }),
+      globalState.subscribe(STORAGE_KEYS.GAME_HISTORY, (newHistory) => {
+        setGameHistory(newHistory);
+      }),
+      globalState.subscribe(STORAGE_KEYS.BET_HISTORY, (newBetHistory) => {
+        setBetHistory(newBetHistory);
+      }),
+      globalState.subscribe(STORAGE_KEYS.PROMO_CODES, (newPromoCodes) => {
+        setPromoCodes(newPromoCodes);
+      }),
+      globalState.subscribe(STORAGE_KEYS.RIGGED_WINNER, (newRiggedWinner) => {
+        setRiggedWinnerId(newRiggedWinner);
+      }),
+      onlineUsersManager.subscribe((newOnlineUsers) => {
+        setOnlineUsers(newOnlineUsers);
+      }),
+    ];
+
+    return () => {
+      unsubscribes.forEach((unsub) => unsub());
+    };
+  }, []);
+
+  // Initialize current user from global storage
+  useEffect(() => {
+    const savedUserId = globalState.getData(STORAGE_KEYS.CURRENT_USER, "");
+    if (savedUserId && users.length > 0) {
       const user = users.find((u) => u.id === savedUserId);
-      if (user) setCurrentUser(user);
+      if (user) {
+        setCurrentUser(user);
+        onlineUsersManager.addUser(user.id);
+      }
     }
   }, [users]);
 
-  // Simulate online count
+  // Handle user going offline when tab closes
   useEffect(() => {
-    const updateOnlineCount = () => {
-      const baseCount = 3; // Minimum online users
-      const randomExtra = Math.floor(Math.random() * 8); // 0-7 extra users
-      setOnlineCount(baseCount + randomExtra);
+    const handleBeforeUnload = () => {
+      if (currentUser) {
+        onlineUsersManager.removeUser(currentUser.id);
+      }
     };
 
-    updateOnlineCount();
-    const interval = setInterval(updateOnlineCount, 15000); // Update every 15 seconds
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (currentUser) {
+        onlineUsersManager.removeUser(currentUser.id);
+      }
+    };
+  }, [currentUser]);
 
-    return () => clearInterval(interval);
-  }, []);
+  // Periodically update user's online status
+  useEffect(() => {
+    if (currentUser) {
+      const interval = setInterval(() => {
+        onlineUsersManager.addUser(currentUser.id);
+      }, 30000); // Update every 30 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [currentUser]);
 
   // Mock Telegram auth
   const handleTelegramAuth = () => {
@@ -121,9 +167,10 @@ const JackpotPage = () => {
       totalWins: 0,
     };
 
-    setUsers((prev) => [...prev, newUser]);
+    const updatedUsers = [...users, newUser];
+    usersManager.set(updatedUsers);
     setCurrentUser(newUser);
-    localStorage.setItem("jackpot_current_user", userId);
+    globalState.setData(STORAGE_KEYS.CURRENT_USER, userId);
   };
 
   // Update user with nickname uniqueness check
@@ -145,16 +192,18 @@ const JackpotPage = () => {
 
     const updatedUser = { ...currentUser, ...updates };
     setCurrentUser(updatedUser);
-    setUsers((prev) =>
-      prev.map((u) => (u.id === currentUser.id ? updatedUser : u)),
+    const updatedUsers = users.map((u) =>
+      u.id === currentUser.id ? updatedUser : u,
     );
+    usersManager.set(updatedUsers);
   };
 
   // Admin update user
   const adminUpdateUser = (userId: string, updates: Partial<User>) => {
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, ...updates } : u)),
+    const updatedUsers = users.map((u) =>
+      u.id === userId ? { ...u, ...updates } : u,
     );
+    usersManager.set(updatedUsers);
     if (currentUser?.id === userId) {
       setCurrentUser((prev) => (prev ? { ...prev, ...updates } : null));
     }
@@ -174,11 +223,10 @@ const JackpotPage = () => {
     }
 
     // Update promo code
-    setPromoCodes((prev) =>
-      prev.map((p) =>
-        p.code === code ? { ...p, usedBy: [...p.usedBy, currentUser.id] } : p,
-      ),
+    const updatedPromoCodes = promoCodes.map((p) =>
+      p.code === code ? { ...p, usedBy: [...p.usedBy, currentUser.id] } : p,
     );
+    globalState.setData(STORAGE_KEYS.PROMO_CODES, updatedPromoCodes);
 
     // Update user balance
     updateUser({ balance: currentUser.balance + promo.amount });
@@ -187,14 +235,16 @@ const JackpotPage = () => {
 
   // Create promo code (admin)
   const createPromoCode = (promo: PromoCode) => {
-    setPromoCodes((prev) => [...prev, promo]);
+    const updatedPromoCodes = [...promoCodes, promo];
+    globalState.setData(STORAGE_KEYS.PROMO_CODES, updatedPromoCodes);
   };
 
   // Toggle promo code (admin)
   const togglePromoCode = (code: string) => {
-    setPromoCodes((prev) =>
-      prev.map((p) => (p.code === code ? { ...p, isActive: !p.isActive } : p)),
+    const updatedPromoCodes = promoCodes.map((p) =>
+      p.code === code ? { ...p, isActive: !p.isActive } : p,
     );
+    globalState.setData(STORAGE_KEYS.PROMO_CODES, updatedPromoCodes);
   };
 
   // Add bet
@@ -220,63 +270,65 @@ const JackpotPage = () => {
       won: false,
       createdAt: new Date().toISOString(),
     };
-    setBetHistory((prev) => [betRecord, ...prev]);
+    const updatedBetHistory = [betRecord, ...betHistory];
+    globalState.setData(STORAGE_KEYS.BET_HISTORY, updatedBetHistory);
 
-    setGameState((prev) => {
-      // Find existing player or create new one
-      const existingPlayerIndex = prev.players.findIndex(
-        (p) => p.userId === currentUser.id,
+    const currentGameState = gameState;
+
+    // Find existing player or create new one
+    const existingPlayerIndex = currentGameState.players.findIndex(
+      (p) => p.userId === currentUser.id,
+    );
+    let newPlayers;
+
+    if (existingPlayerIndex >= 0) {
+      // Update existing player's bet
+      newPlayers = currentGameState.players.map((player, index) =>
+        index === existingPlayerIndex
+          ? { ...player, bet: player.bet + bet }
+          : player,
       );
-      let newPlayers;
-
-      if (existingPlayerIndex >= 0) {
-        // Update existing player's bet
-        newPlayers = prev.players.map((player, index) =>
-          index === existingPlayerIndex
-            ? { ...player, bet: player.bet + bet }
-            : player,
-        );
-      } else {
-        // Add new player
-        const newPlayer: Player = {
-          id: Date.now().toString(),
-          name: currentUser.name,
-          avatar: currentUser.avatar,
-          bet,
-          chance: 0,
-          userId: currentUser.id,
-        };
-        newPlayers = [...prev.players, newPlayer];
-      }
-
-      const newTotalPot = prev.totalPot + bet;
-
-      // Calculate chances
-      const playersWithChances = newPlayers.map((player) => ({
-        ...player,
-        chance: (player.bet / newTotalPot) * 100,
-      }));
-
-      // Start countdown if we have 2+ players from different users
-      let newStatus = prev.gameStatus;
-      let newTimeLeft = prev.timeLeft;
-
-      const uniquePlayers = new Set(newPlayers.map((p) => p.userId));
-
-      if (uniquePlayers.size >= 2 && prev.gameStatus === "waiting") {
-        newStatus = "countdown";
-        newTimeLeft = 30;
-      }
-
-      return {
-        ...prev,
-        players: playersWithChances,
-        totalPot: newTotalPot,
-        gameStatus: newStatus,
-        timeLeft: newTimeLeft,
-        gameId,
+    } else {
+      // Add new player
+      const newPlayer: Player = {
+        id: Date.now().toString(),
+        name: currentUser.name,
+        avatar: currentUser.avatar,
+        bet,
+        chance: 0,
+        userId: currentUser.id,
       };
-    });
+      newPlayers = [...currentGameState.players, newPlayer];
+    }
+
+    const newTotalPot = currentGameState.totalPot + bet;
+
+    // Calculate chances
+    const playersWithChances = newPlayers.map((player) => ({
+      ...player,
+      chance: (player.bet / newTotalPot) * 100,
+    }));
+
+    // Start countdown if we have 2+ players from different users
+    let newStatus = currentGameState.gameStatus;
+    let newTimeLeft = currentGameState.timeLeft;
+
+    const uniquePlayers = new Set(newPlayers.map((p) => p.userId));
+
+    if (uniquePlayers.size >= 2 && currentGameState.gameStatus === "waiting") {
+      newStatus = "countdown";
+      newTimeLeft = 30;
+    }
+
+    const newGameState = {
+      ...currentGameState,
+      players: playersWithChances,
+      totalPot: newTotalPot,
+      gameStatus: newStatus,
+      timeLeft: newTimeLeft,
+    };
+
+    gameStateManager.set(newGameState);
 
     // Update user balance and stats
     updateUser({
@@ -290,10 +342,11 @@ const JackpotPage = () => {
   useEffect(() => {
     if (gameState.gameStatus === "countdown" && gameState.timeLeft > 0) {
       const timer = setTimeout(() => {
-        setGameState((prev) => ({
-          ...prev,
-          timeLeft: prev.timeLeft - 1,
-        }));
+        const updatedGameState = {
+          ...gameState,
+          timeLeft: gameState.timeLeft - 1,
+        };
+        gameStateManager.set(updatedGameState);
       }, 1000);
       return () => clearTimeout(timer);
     } else if (
@@ -305,7 +358,8 @@ const JackpotPage = () => {
   }, [gameState.timeLeft, gameState.gameStatus]);
 
   const startSpin = () => {
-    setGameState((prev) => ({ ...prev, gameStatus: "spinning" }));
+    const updatedGameState = { ...gameState, gameStatus: "spinning" };
+    gameStateManager.set(updatedGameState);
 
     // Simulate spinning for 3 seconds
     setTimeout(() => {
@@ -348,13 +402,12 @@ const JackpotPage = () => {
       }
 
       // Update bet history - mark winner
-      setBetHistory((prev) =>
-        prev.map((bet) =>
-          bet.gameId === gameState.gameId && bet.userId === winner.userId
-            ? { ...bet, won: true }
-            : bet,
-        ),
+      const updatedBetHistory = betHistory.map((bet) =>
+        bet.gameId === gameState.gameId && bet.userId === winner.userId
+          ? { ...bet, won: true }
+          : bet,
       );
+      globalState.setData(STORAGE_KEYS.BET_HISTORY, updatedBetHistory);
 
       // Update winner stats
       const winnerUser = users.find((u) => u.id === winner.userId);
@@ -373,13 +426,15 @@ const JackpotPage = () => {
         players: gameState.players,
         finishedAt: new Date().toISOString(),
       };
-      setGameHistory((prev) => [gameRecord, ...prev]);
+      const updatedGameHistory = [gameRecord, ...gameHistory];
+      globalState.setData(STORAGE_KEYS.GAME_HISTORY, updatedGameHistory);
 
-      setGameState((prev) => ({
-        ...prev,
+      const finishedGameState = {
+        ...gameState,
         gameStatus: "finished",
         winner,
-      }));
+      };
+      gameStateManager.set(finishedGameState);
 
       // Reset after 10 seconds
       setTimeout(() => {
@@ -428,7 +483,7 @@ const JackpotPage = () => {
             <div className="flex items-center space-x-2 bg-green-500/20 px-3 py-1 rounded-full">
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
               <span className="text-sm text-green-300 font-medium">
-                {onlineCount} онлайн
+                {onlineUsers.length} онлайн
               </span>
             </div>
           </div>

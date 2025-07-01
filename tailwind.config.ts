@@ -103,6 +103,10 @@ export default {
         "accordion-up": "accordion-up 0.2s ease-out",
         "spin-slow": "spin 4s linear infinite",
         "pulse-glow": "pulse 2s ease-in-out infinite alternate",
+        "spin-custom": "spin 3s cubic-bezier(0.23, 1, 0.32, 1) forwards",
+      },
+      transitionDuration: {
+        "3000": "3000ms",
       },
     },
   },

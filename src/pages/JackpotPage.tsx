@@ -8,6 +8,7 @@ import Icon from "@/components/ui/icon";
 import ProfileModal from "@/components/ProfileModal";
 import AdminPanel from "@/components/AdminPanel";
 import HistoryModal from "@/components/HistoryModal";
+import RouletteWheel from "@/components/RouletteWheel";
 import {
   User,
   Player,
@@ -317,7 +318,7 @@ const JackpotPage = () => {
 
     if (uniquePlayers.size >= 2 && currentGameState.gameStatus === "waiting") {
       newStatus = "countdown";
-      newTimeLeft = 30;
+      newTimeLeft = 60; // Увеличиваем до 60 секунд
     }
 
     const newGameState = {
@@ -436,16 +437,17 @@ const JackpotPage = () => {
       };
       gameStateManager.set(finishedGameState);
 
-      // Reset after 10 seconds
+      // Auto-restart after 10 seconds
       setTimeout(() => {
-        setGameState({
+        const newGameState = {
           players: [],
           totalPot: 0,
           timeLeft: 0,
-          gameStatus: "waiting",
+          gameStatus: "waiting" as const,
           winner: null,
-          gameId: "",
-        });
+          gameId: "game_" + Date.now(),
+        };
+        gameStateManager.set(newGameState);
       }, 10000);
     }, 3000);
   };
@@ -455,7 +457,9 @@ const JackpotPage = () => {
 
     switch (gameState.gameStatus) {
       case "waiting":
-        return `Ожидание игроков (${uniquePlayers}/2 уникальных)`;
+        return uniquePlayers < 2
+          ? `Ожидание игроков (${uniquePlayers}/2 минимум)`
+          : `Игроков в игре: ${uniquePlayers}`;
       case "countdown":
         return `Начало через ${gameState.timeLeft}с`;
       case "spinning":
@@ -563,7 +567,7 @@ const JackpotPage = () => {
                       <div
                         className="absolute inset-0 rounded-full border-4 border-yellow-400 transition-all duration-1000"
                         style={{
-                          clipPath: `polygon(50% 50%, 50% 0%, ${50 + 50 * Math.cos((2 * Math.PI * (30 - gameState.timeLeft)) / 30 - Math.PI / 2)}% ${50 + 50 * Math.sin((2 * Math.PI * (30 - gameState.timeLeft)) / 30 - Math.PI / 2)}%, 50% 0%)`,
+                          clipPath: `polygon(50% 50%, 50% 0%, ${50 + 50 * Math.cos((2 * Math.PI * (60 - gameState.timeLeft)) / 60 - Math.PI / 2)}% ${50 + 50 * Math.sin((2 * Math.PI * (60 - gameState.timeLeft)) / 60 - Math.PI / 2)}%, 50% 0%)`,
                         }}
                       ></div>
                       <div className="absolute inset-0 flex items-center justify-center">
@@ -574,10 +578,13 @@ const JackpotPage = () => {
                     </div>
                   )}
 
-                  {gameState.gameStatus === "spinning" && (
-                    <div className="w-32 h-32 mx-auto">
-                      <div className="animate-spin rounded-full h-32 w-32 border-8 border-yellow-400 border-t-transparent"></div>
-                    </div>
+                  {(gameState.gameStatus === "spinning" ||
+                    gameState.players.length > 0) && (
+                    <RouletteWheel
+                      players={gameState.players}
+                      isSpinning={gameState.gameStatus === "spinning"}
+                      winner={gameState.winner}
+                    />
                   )}
 
                   {gameState.winner && (

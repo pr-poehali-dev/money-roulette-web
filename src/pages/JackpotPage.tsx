@@ -46,14 +46,18 @@ const JackpotPage = () => {
   // State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [betAmount, setBetAmount] = useState<string>("");
-  const [gameState, setGameState] = useState<GameState>({
-    players: [],
-    totalPot: 0,
-    timeLeft: 0,
-    gameStatus: "waiting",
-    winner: null,
-    gameId: "",
-  });
+  const [gameState, setGameState] = useLocalStorage<GameState>(
+    "jackpot_game_state",
+    {
+      players: [],
+      totalPot: 0,
+      timeLeft: 0,
+      gameStatus: "waiting",
+      winner: null,
+      gameId: "",
+    },
+  );
+  const [onlineCount, setOnlineCount] = useState<number>(1);
 
   // Modals
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -74,6 +78,20 @@ const JackpotPage = () => {
       if (user) setCurrentUser(user);
     }
   }, [users]);
+
+  // Simulate online count
+  useEffect(() => {
+    const updateOnlineCount = () => {
+      const baseCount = 3; // Minimum online users
+      const randomExtra = Math.floor(Math.random() * 8); // 0-7 extra users
+      setOnlineCount(baseCount + randomExtra);
+    };
+
+    updateOnlineCount();
+    const interval = setInterval(updateOnlineCount, 15000); // Update every 15 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Mock Telegram auth
   const handleTelegramAuth = () => {
@@ -399,11 +417,20 @@ const JackpotPage = () => {
       {/* Header */}
       <div className="border-b border-purple-500/20 bg-black/30 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <Icon name="Crown" className="text-yellow-400" size={28} />
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
-              JACKPOT ROULETTE
-            </h1>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Icon name="Crown" className="text-yellow-400" size={28} />
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
+                JACKPOT ROULETTE
+              </h1>
+            </div>
+
+            <div className="flex items-center space-x-2 bg-green-500/20 px-3 py-1 rounded-full">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-sm text-green-300 font-medium">
+                {onlineCount} онлайн
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center space-x-4">

@@ -24,6 +24,7 @@ import {
   globalState,
   STORAGE_KEYS,
   initializeGlobalState,
+  forceSyncAllData,
 } from "@/services/globalState";
 
 const JackpotPage = () => {
@@ -61,14 +62,20 @@ const JackpotPage = () => {
 
   // Subscribe to global state changes
   useEffect(() => {
-    // Load initial data
-    setUsers(usersManager.get());
-    setGameState(gameStateManager.get());
-    setGameHistory(globalState.getData(STORAGE_KEYS.GAME_HISTORY, []));
-    setBetHistory(globalState.getData(STORAGE_KEYS.BET_HISTORY, []));
-    setPromoCodes(globalState.getData(STORAGE_KEYS.PROMO_CODES, []));
-    setRiggedWinnerId(globalState.getData(STORAGE_KEYS.RIGGED_WINNER, ""));
-    setOnlineUsers(onlineUsersManager.get());
+    // Force sync all data for new users first
+    forceSyncAllData();
+
+    // Small delay to ensure sync is complete
+    setTimeout(() => {
+      // Load initial data
+      setUsers(usersManager.get());
+      setGameState(gameStateManager.get());
+      setGameHistory(globalState.getData(STORAGE_KEYS.GAME_HISTORY, []));
+      setBetHistory(globalState.getData(STORAGE_KEYS.BET_HISTORY, []));
+      setPromoCodes(globalState.getData(STORAGE_KEYS.PROMO_CODES, []));
+      setRiggedWinnerId(globalState.getData(STORAGE_KEYS.RIGGED_WINNER, ""));
+      setOnlineUsers(onlineUsersManager.get());
+    }, 100);
 
     // Subscribe to changes
     const unsubscribes = [
@@ -437,7 +444,7 @@ const JackpotPage = () => {
       };
       gameStateManager.set(finishedGameState);
 
-      // Auto-restart after 10 seconds
+      // Auto-restart after 5 seconds
       setTimeout(() => {
         const newGameState = {
           players: [],
@@ -448,7 +455,7 @@ const JackpotPage = () => {
           gameId: "game_" + Date.now(),
         };
         gameStateManager.set(newGameState);
-      }, 10000);
+      }, 5000);
     }, 3000);
   };
 
@@ -461,7 +468,7 @@ const JackpotPage = () => {
           ? `Ожидание игроков (${uniquePlayers}/2 минимум)`
           : `Игроков в игре: ${uniquePlayers}`;
       case "countdown":
-        return `Начало через ${gameState.timeLeft}с`;
+        return `Начало через ${gameState.timeLeft}с (ставки принимаются)`;
       case "spinning":
         return "Определяем победителя...";
       case "finished":
@@ -531,6 +538,19 @@ const JackpotPage = () => {
                     </div>
                   </div>
                   <div className="text-2xl">{currentUser.avatar}</div>
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    localStorage.removeItem("currentUser");
+                    window.location.reload();
+                  }}
+                  className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                >
+                  <Icon name="LogOut" className="mr-2" size={16} />
+                  Выход
                 </Button>
               </>
             ) : (
@@ -620,7 +640,10 @@ const JackpotPage = () => {
                         value={betAmount}
                         onChange={(e) => setBetAmount(e.target.value)}
                         className="bg-gray-800 border-gray-600 text-white"
-                        disabled={gameState.gameStatus === "countdown"}
+                        disabled={
+                          gameState.gameStatus === "spinning" ||
+                          gameState.gameStatus === "finished"
+                        }
                       />
                       <Button
                         onClick={handleBet}
@@ -628,7 +651,8 @@ const JackpotPage = () => {
                           !betAmount ||
                           parseFloat(betAmount) <= 0 ||
                           parseFloat(betAmount) > currentUser.balance ||
-                          gameState.gameStatus === "countdown"
+                          gameState.gameStatus === "spinning" ||
+                          gameState.gameStatus === "finished"
                         }
                         className="bg-yellow-600 hover:bg-yellow-700 text-black font-bold"
                       >
@@ -795,10 +819,11 @@ const JackpotPage = () => {
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-gray-300">
                 <p>• Минимум 2 разных игрока для старта</p>
-                <p>• Таймер 30 секунд после 2-й ставки</p>
+                <p>• Таймер 60 секунд после 2-й ставки</p>
+                <p>• Ставки принимаются во время обратного отсчета</p>
                 <p>• Шанс победы = ваша ставка / общий банк</p>
                 <p>• Победитель забирает весь банк</p>
-                <p>• Комиссия сайта: 5%</p>
+                <p>• Новая игра через 5 секунд после завершения</p>
               </CardContent>
             </Card>
           </div>

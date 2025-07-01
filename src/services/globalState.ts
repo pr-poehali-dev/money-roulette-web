@@ -144,6 +144,27 @@ export const initializeGlobalState = () => {
   if (!localStorage.getItem(STORAGE_KEYS.ONLINE_USERS)) {
     globalState.setData<string[]>(STORAGE_KEYS.ONLINE_USERS, []);
   }
+
+  // Force sync all data to ensure new tabs see current state
+  forceSyncAllData();
+};
+
+// Force sync all data across tabs for new users
+export const forceSyncAllData = () => {
+  if (typeof window !== "undefined") {
+    // Broadcast current state to all tabs via storage events
+    Object.values(STORAGE_KEYS).forEach((key) => {
+      const data = localStorage.getItem(key);
+      if (data) {
+        // Trigger storage event manually for same tab
+        window.dispatchEvent(
+          new CustomEvent("localStateChange", {
+            detail: { key, value: JSON.parse(data) },
+          }),
+        );
+      }
+    });
+  }
 };
 
 // Helper functions for specific data types
